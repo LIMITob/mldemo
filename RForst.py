@@ -16,58 +16,76 @@ class Node(object):
         self.father = father
         self.data = data
         self.child = {}
-        self.result = None
-    def set_feature(self,feature):
+        self.result = -1
+        self.feature = None
+        self.value = None
+        
+    def set_feature(self, feature):
         self.feature = feature
-    def set_result(self,result):
+    def set_result(self, result):
         self.result = result
-    def set_value(self,value):
-        self.value = value
         
 class DecisionTree(object):
-    def __init__(self,features,dataset,limit=20):
+    def __init__(self,dataset,limit=100):
         self.dataset = dataset
-        self.features = []
+        self.features = list(dataset.columns)
+        del self.features[self.features.index('Survived')]
+        self.limit = limit
         #self.dataset = dataset
-        self.root = Node(None,dataset)
-        
+        self.root = None
+
     def buildTree(self,root,dataset,features,value=None):
-        
-        current_node = Node(root,dataset)
-        
+        #print len(dataset)
         if None != root:
+            current_node = Node(root,dataset)
             root.child[value] = current_node
+        else:
+            current_node = Node(None,dataset)
+            self.root = current_node
             
         current_data = dataset
         current_features = features
         
         # the data has been split to a threshold
-        if len(dataset) > self.limit or (current_features) > 1:
-            
+        if len(current_data) > self.limit and len(current_features) > 1:
             current_feature = feature_selection(current_data,current_features)
             current_node.set_feature(current_feature)
-            
+            #create the children node 
             for i in list(Counter(titanic[current_feature])):
-                child_data = [current_data[current_feature]==i]
-                self.buildTree(current_node, child_data, features, i)
+                child_data = current_data[current_data[current_feature]==i]
+                index = current_features.index(current_feature)
+                cfeatures = current_features[0:index] + current_features[index+1:]
+                
+                if len(child_data) > 0:
+                    self.buildTree(current_node, child_data, cfeatures, i) 
+        #`do some stuff when the node is leafnode
         else:
-            result = list(Counter(current_data['Survived']).most_common(1))[0]
-            current_node.set_result(result)
+            result = Counter(current_data['Survived'])
+            #print result.most_common(1)[0][0]
+            current_node.set_result(result.most_common(1)[0][0])
             current_node.child = None
         return
     
-    def search(self,data, root=self.root):
+    def search(self, data, root):
+        
         current = root
         if current.child == None:
+            #print '------------------------',current.result
             return current.result
         else:
-            self.search(current.child[data[current.feature]])
+            #print current.feature,'|',list(data[current.feature])[0],'|',current.result
+            return self.search(data,current.child[list(data[current.feature])[0]])
+         
         
-    def classify(self, dataset):
+    def classify(self, dataset ,root):
         result = []
-        for item in dataset:
-            result.append(self.search(item))
+        for i in range(len(dataset)):
+            
+            result.append(self.search(dataset[i:i+1], root))
         return result
+        
+    def score(self,x,y):
+                
         
 class RandomForestClassifier(object):
     
@@ -89,7 +107,7 @@ def calc_entropy(dataset):
         # when 0log0 ,let it equals zero
         if tmp_prob == 0:
             continue
-        entropy += tmp_prob*math.log(tmp_prob,2)
+        entropy += tmp_prob * math.log(tmp_prob, 2)
     return 0 - entropy
  
 # Type(dataset) == pd.DataFrame 
@@ -114,18 +132,18 @@ def calc_cond_entropy(dataset,cond_item):
 
 def feature_selection(dataset,features):
     entropy = calc_entropy(dataset)
-    
     factor = []
     for i in features:
         factor.append(entropy - calc_cond_entropy(dataset,i))
         #print entropy - calc_cond_entropy(dataset,i),
-    
     index = factor.index(max(factor))
     return features[index]
     
 if __name__=='__main__':
     titanic,test = pre_process()
-    titanic = titanic[titanic['Embarked']=='Q']
-    print titanic[:10]
-    features = list(titanic.columns)[1:]
-    print feature_selection(titanic,features)
+    #print titanic[:10]
+    t = DecisionTree(titanic)
+    
+    t.buildTree(t.root,t.dataset,t.features)
+    result = t.classify(titanic,t.root)
+    print Counter(list(result == titanic['Survived']))[1]/float(len(titanic))
