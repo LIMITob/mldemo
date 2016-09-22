@@ -4,7 +4,13 @@ Thie file implements a simple RandomForestClassifier
 """
 __auther__ = 'ZT.Chow'
 
+__all__ = ['Node',
+           'DecisionTree',
+           'RandomForestClassifier']
+        
 import pandas as pd
+import numpy as np
+import random
 import math
 
 from preprocessing import pre_process
@@ -26,13 +32,14 @@ class Node(object):
         self.result = result
         
 class DecisionTree(object):
-    def __init__(self,dataset,limit=100):
+    def __init__(self,dataset,limit=0):
         self.dataset = dataset
         self.features = list(dataset.columns)
         del self.features[self.features.index('Survived')]
         self.limit = limit
         #self.dataset = dataset
         self.root = None
+        self.result = []
 
     def buildTree(self,root,dataset,features,value=None):
         #print len(dataset)
@@ -67,33 +74,58 @@ class DecisionTree(object):
         return
     
     def search(self, data, root):
-        
         current = root
         if current.child == None:
             #print '------------------------',current.result
             return current.result
         else:
             #print current.feature,'|',list(data[current.feature])[0],'|',current.result
+            print current.feature, len(current.child) ,list(data[current.feature])
             return self.search(data,current.child[list(data[current.feature])[0]])
-         
-        
+            
     def classify(self, dataset ,root):
         result = []
         for i in range(len(dataset)):
-            
             result.append(self.search(dataset[i:i+1], root))
         return result
         
     def score(self,x,y):
+        result = self.classify(x,self.root)
+        #print result,type(y)
+        return Counter(list(result == y))[1]/float(len(x))
                 
         
 class RandomForestClassifier(object):
-    
-    def __init__(self,):
-        self.tree_num = 10
-
-        pass
-
+    def __init__(self,tree_num=1,data_num=0.6,freature_num=0.6,criterion='infogain'):
+        self.tree_num = tree_num
+        self.data_num = data_num
+        self.feature_num = freature_num
+        self.trees = []
+        
+    def train(self,X,y):
+        features = list(X.columns)
+        for i in range(self.tree_num):
+            dindex = np.random.randint(0,len(X),(int(self.data_num*len(X)),))          
+            findex = random.sample(features[1:], int((1-self.feature_num)*len(features)))            
+            dcurrent = X.loc[dindex]
+            #print features-findex
+            for j in findex:                
+                del dcurrent[j]
+            t = DecisionTree(dcurrent)
+            t.buildTree(t.root,t.dataset,t.features)
+            self.trees.append(t)
+        if len(self.trees) == self.tree_num:
+            print 'Build Success!'
+        return 
+        
+    def classify(self,X):
+        result = []
+        for i in self.trees:
+            result.append(i.classify(X,i.root))
+        return result
+        
+    def score(self,X,y):
+        return
 #Type(dataset) == pd.DataFrame 
 def calc_entropy(dataset):
     num_entries = len(dataset)
@@ -101,7 +133,8 @@ def calc_entropy(dataset):
     label_counts = {}
     for item in dataset['Survived']:
         label_counts.setdefault(item,0)
-        label_counts[item] += 1 
+        label_counts[item] += 1
+        
     for key in label_counts:
         tmp_prob = float(label_counts[key])/num_entries
         # when 0log0 ,let it equals zero
@@ -143,7 +176,10 @@ if __name__=='__main__':
     titanic,test = pre_process()
     #print titanic[:10]
     t = DecisionTree(titanic)
-    
     t.buildTree(t.root,t.dataset,t.features)
-    result = t.classify(titanic,t.root)
-    print Counter(list(result == titanic['Survived']))[1]/float(len(titanic))
+    rf = RandomForestClassifier()
+    rf.train(titanic,titanic['Survived'])
+    #result = rf.classify(titanic)
+    print len(rf.trees)
+    print t.score(titanic,titanic['Survived'])
+    
